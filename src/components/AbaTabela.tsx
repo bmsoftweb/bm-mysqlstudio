@@ -10,7 +10,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Check, Columns3, FileCode, KeyRound, ListOrdered, Pencil, Plus, RefreshCw, SlidersHorizontal, Table, Trash2, Zap } from 'lucide-react';
 import { Alvo, Valor, escalar, linhas, rodar, texto } from '../lib/api';
 import { getCreate, q, versaoCurta } from '../lib/db';
-import { TableSpec, designScript, escapeStr, hasDecimals, joinType, newColSpec, specDdl, splitType } from '../lib/compareLogic';
+import { TableSpec, defaultSql, designScript, escapeStr, hasDecimals, joinType, newColSpec, specDdl, splitType } from '../lib/compareLogic';
 import { splitScript } from '../lib/sqlText';
 import { avisar, confirmar, confirmarDescarte } from '../lib/avisos';
 import { Aba, useApp, useControleAba } from '../app/contexto';
@@ -189,7 +189,7 @@ export function specDe(e: Estado): TableSpec {
           notNull: c[cNotNull] === '1',
           pk: c[cPk] === '1',
           autoInc: c[cAuto] === '1',
-          default: c[cDefault].trim(),
+          default: defaultSql(c[cDefault], c[cType]),
           comment: c[cComment],
           orig: c[cOrig],
           extra: c[cExtra],

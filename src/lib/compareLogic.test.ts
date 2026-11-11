@@ -19,6 +19,7 @@ import {
   alterTable,
   bulkAdd,
   bulkEnd,
+  defaultSql,
   changes,
   colsDiff,
   compareData,
@@ -138,6 +139,26 @@ test('splitType / joinType', () => {
   assert.ok(hasDecimals('Decimal(15,2)') && hasDecimals('double unsigned') && !hasDecimals('int') && !hasDecimals(''), 'HasDecimals');
 });
 
+// Default digitado na grade: [valor, tipo, expressão que vai no DDL]
+test('defaultSql', () => {
+  const casos = [
+    ['user', 'enum', "'user'"],
+    [' user ', 'ENUM', "'user'"],
+    ["'user'", 'enum', "'user'"],
+    ['abc', 'varchar', "'abc'"],
+    ['', 'varchar', ''],
+    ['null', 'varchar', 'null'],
+    ['(uuid())', 'char', '(uuid())'],
+    ["_utf8mb4'x'", 'varchar', "_utf8mb4'x'"],
+    ['0', 'tinyint', '0'],
+    ['1.5', 'decimal unsigned', '1.5'],
+    ['2026-01-01', 'date', "'2026-01-01'"],
+    ['CURRENT_TIMESTAMP', 'datetime', 'CURRENT_TIMESTAMP'],
+    ['CURRENT_TIMESTAMP(6)', 'timestamp', 'CURRENT_TIMESTAMP(6)'],
+  ];
+  for (const [v, tipo, esperado] of casos) assert.equal(defaultSql(v, tipo), esperado, `${tipo}: ${v}`);
+});
+
 test('escapeStr', () => {
   assert.equal(escapeStr("d'Ávila\\"), "d\\'Ávila\\\\");
   assert.equal(escapeStr('a\0b\nc\rd\x1ae"f'), 'a\\0b\\nc\\rd\\Ze\\"f');
@@ -190,11 +211,30 @@ test('specDdl / designScript', () => {
   ];
   const t2: TableSpec = { ...t1, name: 'pedidos', cols, idx: [{ ...t1.idx[0], cols: 'descricao' }] };
   const n = designScript(t1, t2, false);
-  assert.ok(n.startsWith('RENAME TABLE `pedido` TO `pedidos`;\n\nALTER TABLE `pedidos`\n  CHANGE COLUMN `nome` `descricao` varchar(50);'), 'renomeia');
-  assert.ok(n.includes('MODIFY COLUMN `descricao` varchar(80)'), 'muda tipo');
+  assert.ok(n.startsWith('RENAME TABLE `pedido` TO `pedidos`;\n\nALTER TABLE `pedidos`\n  CHANGE COLUMN `nome` `descricao` varchar(80),'), 'renomeia e muda o tipo no mesmo comando');
+  assert.equal(n.split('ALTER TABLE').length, 2, 'um ALTER só: ou entra inteiro ou não entra');
   assert.ok(n.includes('ADD COLUMN `total` decimal(15,2) NOT NULL DEFAULT 0 AFTER `descricao`'), 'inclui coluna');
   assert.ok(n.includes('DROP COLUMN `obs`') && !n.includes('INDEX'), 'exclui coluna sem mexer no índice');
   assert.equal(t1.cols[1].name, 'nome', 'DesignScript não altera o original');
+
+  // renomear e trocar o tipo (admin tinyint -> nivel enum), só renomear, renomear e subir a coluna
+  const u1: TableSpec = { ...t1, name: 'u', idx: [], cols: [t1.cols[0], newColSpec({ name: 'admin', orig: 'admin', colType: 'tinyint', notNull: true, default: '0' }), t1.cols[2]] };
+  const nivel = { ...u1.cols[1], name: 'nivel', colType: "enum('super','admin','user')", default: "'user'" };
+  assert.equal(
+    designScript(u1, { ...u1, cols: [u1.cols[0], nivel, u1.cols[2]] }, false),
+    "ALTER TABLE `u`\n  CHANGE COLUMN `admin` `nivel` enum('super','admin','user') NOT NULL DEFAULT 'user';\n\n",
+    'renomeia e troca o tipo',
+  );
+  assert.equal(
+    designScript(u1, { ...u1, cols: [u1.cols[0], { ...u1.cols[1], name: 'adm' }, u1.cols[2]] }, false),
+    'ALTER TABLE `u`\n  CHANGE COLUMN `admin` `adm` tinyint NOT NULL DEFAULT 0;\n\n',
+    'só renomeia',
+  );
+  assert.equal(
+    designScript(u1, { ...u1, cols: [u1.cols[0], u1.cols[2], { ...u1.cols[1], name: 'adm' }] }, false),
+    'ALTER TABLE `u`\n  CHANGE COLUMN `admin` `adm` tinyint NOT NULL DEFAULT 0 AFTER `obs`;\n\n',
+    'renomeia e muda de lugar',
+  );
 
   // índice único, FK com regra, comentários e engine padrão
   const t3: TableSpec = {

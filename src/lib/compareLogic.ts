@@ -432,8 +432,20 @@ function movedCols(s: TableDef, t: TableDef): string[] {
  * alteração de colunas/índices usados por elas.
  * order (editor de tabela): também leva a ordem das colunas; a comparação de esquemas não sincroniza a ordem.
  * As colunas fora de lugar vão como MODIFY ... AFTER, na ordem final (o MySQL posiciona uma a uma, nessa ordem).
+ * ren (editor de tabela): nome novo -> nome no banco das colunas renomeadas; tgtDdl já vem com o nome novo. Elas
+ * vão como CHANGE COLUMN com a definição inteira, no mesmo ALTER: renomear e mudar o tipo é um comando só, que
+ * ou entra inteiro ou não entra (em dois, a falha do segundo deixava a coluna renomeada pela metade).
  */
-export function alterTable(name: string, srcDdl: string, tgtDdl: string, pre: string[], main: string[], post: string[], order = false): void {
+export function alterTable(
+  name: string,
+  srcDdl: string,
+  tgtDdl: string,
+  pre: string[],
+  main: string[],
+  post: string[],
+  order = false,
+  ren?: Map<string, string>,
+): void {
   const s = parseTable(srcDdl);
   const t = parseTable(tgtDdl);
   const c: string[] = [];
@@ -445,7 +457,9 @@ export function alterTable(name: string, srcDdl: string, tgtDdl: string, pre: st
     const at = prev === '' ? ' FIRST' : ' AFTER ' + q(prev);
     const sd = s.cols.get(n) ?? '';
     const td = t.cols.get(n);
+    const de = ren?.get(n);
     if (td === undefined) c.push('ADD COLUMN ' + sd + at);
+    else if (de !== undefined) c.push(`CHANGE COLUMN ${q(de)} ${sd}` + (order && moved.includes(n) ? at : ''));
     else if (order && moved.includes(n)) c.push('MODIFY COLUMN ' + sd + at);
     else if (td !== sd) c.push('MODIFY COLUMN ' + sd);
     prev = n;
@@ -1115,7 +1129,7 @@ export function specDdl(t: TableSpec): string {
   return r;
 }
 
-/** Script que leva a tabela de old para novo: RENAME TABLE, CHANGE COLUMN (renomeadas) e o ALTER da comparação. */
+/** Script que leva a tabela de old para novo: RENAME TABLE e o ALTER da comparação, com as renomeadas como CHANGE COLUMN. */
 export function designScript(old: TableSpec, novo: TableSpec, isNew: boolean): string {
   const newDdl = specDdl(novo);
   if (isNew) return newDdl + ';\n';
@@ -1126,15 +1140,15 @@ export function designScript(old: TableSpec, novo: TableSpec, isNew: boolean): s
     r = `RENAME TABLE ${q(old.name)} TO ${q(novo.name)};\n\n`;
     o.name = novo.name;
   }
-  const map = new Map<string, string>();
-  const ren: string[] = [];
+  const map = new Map<string, string>(); // nome no banco -> nome novo
+  const ren = new Map<string, string>(); // nome novo -> nome no banco
   for (const c of novo.cols)
     if (c.orig !== '' && c.orig !== c.name)
       for (const oc of o.cols)
         if (oc.name === c.orig) {
           map.set(c.orig, c.name);
-          oc.name = c.name;
-          ren.push(`CHANGE COLUMN ${q(c.orig)} ${colDdl(oc)}`); // só o nome; o resto vai no ALTER abaixo
+          ren.set(c.name, c.orig);
+          oc.name = c.name; // a comparação abaixo enxerga a coluna pelo nome novo
         }
   const mapList = (cols: string) =>
     cols
@@ -1144,12 +1158,11 @@ export function designScript(old: TableSpec, novo: TableSpec, isNew: boolean): s
       .join(', ');
   for (const i of o.idx) i.cols = mapList(i.cols);
   for (const f of o.fks) f.cols = mapList(f.cols);
-  if (ren.length > 0) r += `ALTER TABLE ${q(novo.name)}\n  ${ren.join(',\n  ')};\n\n`;
-  if (newDdl !== specDdl(o)) {
+  if (ren.size > 0 || newDdl !== specDdl(o)) {
     const pre: string[] = [];
     const main: string[] = [];
     const post: string[] = [];
-    alterTable(novo.name, newDdl, specDdl(o), pre, main, post, true);
+    alterTable(novo.name, newDdl, specDdl(o), pre, main, post, true, ren);
     r += pre.join('') + (pre.length > 0 ? '\n' : '') + main.join('') + post.join('');
   }
   return r;
@@ -1169,6 +1182,19 @@ export function csvLit(v: string, dataType: string): string {
   if (TIPOS_NUMERO.includes(tipo) && s.includes(',')) s = s.replaceAll('.', '').replace(',', '.');
   else if (TIPOS_DATA.includes(tipo)) s = s.replace(/^(\d{2})\/(\d{2})\/(\d{4})(.*)$/, '$3-$2-$1$4');
   return "'" + escapeStr(s) + "'";
+}
+
+/**
+ * Default digitado na grade do editor de tabela, como expressão SQL: em coluna de texto (ou data começando por
+ * dígito), valor sem aspas ganha aspas: user -> 'user'. Sem isso o enum saía com DEFAULT user, erro de sintaxe.
+ * Com aspas ou parênteses já é expressão e fica como foi digitado; NULL e CURRENT_TIMESTAMP também.
+ */
+export function defaultSql(v: string, colType: string): string {
+  const s = trim(v);
+  if (s === '' || mesmoTexto(s, 'NULL') || /['"(]/.test(s)) return s;
+  const tipo = trim(colType).split(/[ (]/)[0].toLowerCase();
+  const literal = TIPOS_TEXTO.includes(tipo) || ([...TIPOS_DATA, 'time'].includes(tipo) && /^\d/.test(s));
+  return literal ? "'" + escapeStr(s) + "'" : s;
 }
 
 // Tipo de coluna da grade: "decimal(15,2) unsigned" <-> "decimal unsigned", "15", "2" (enum/set: os valores vão no tamanho).

@@ -2,6 +2,11 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.4 — 2026-11-11
+
+- Editor de tabela: renomear uma coluna e mudar o tipo dela sai num único `ALTER TABLE` (`CHANGE COLUMN` com a definição inteira). Em dois comandos, a falha do segundo deixava a coluna renomeada no banco e o Aplicar seguinte dava "Unknown column".
+- Editor de tabela: Default digitado sem aspas em coluna de texto, enum ou set (e data começando por dígito) vai entre aspas: `user` vira `'user'`.
+
 ## 0.0.3 — 2026-11-10
 
 - App instalável (PWA), no modelo do crmWeb: manifesto, ícones (192, 512, adaptável e iPhone) e service worker sem cache; abre em janela própria.
