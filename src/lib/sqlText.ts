@@ -528,3 +528,15 @@ export function splitScript(s: string): string[] {
   const d = new DivisorScript();
   return [...d.alimentar(s), ...d.fim()];
 }
+
+/**
+ * O que a aba de consulta manda ao servidor. Sem DELIMITER vai o texto inteiro: o MySQL separa as instruções e
+ * entende o corpo com ';' de trigger/rotina. DELIMITER é comando do cliente (o servidor dá erro 1064 nele): com
+ * uma linha dessas, o texto vai quebrado em instruções, como no cliente mysql.
+ */
+// ponytail: a linha é reconhecida por regex; uma coluna "delimiter int" sozinha na linha também quebra o texto por
+// ';' (só atrapalha se o mesmo texto tiver trigger/rotina com corpo e sem DELIMITER). Se incomodar, perguntar ao
+// DivisorScript se o delimitador mudou.
+export function paraExecutar(sql: string): string | string[] {
+  return /^[ \t]*delimiter[ \t]+\S/im.test(sql) ? splitScript(sql) : sql;
+}

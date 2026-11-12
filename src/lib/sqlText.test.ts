@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DivisorScript, dropParens, formatSql, isKeyword, singleSelect, splitScript, sqlKeywords, statementAt, tokenize, unquote,
+  DivisorScript, dropParens, formatSql, isKeyword, paraExecutar, singleSelect, splitScript, sqlKeywords, statementAt, tokenize,
+  unquote,
 } from './sqlText';
 
 // Os testes até "SingleSelect" são os do ..\delphi\tests\TestCompare.dpr, com as mesmas entradas e saídas
@@ -161,6 +162,18 @@ const rotinasEsperado = [
 test('DivisorScript: DELIMITER', () => {
   assert.deepEqual(splitScript(rotinas), rotinasEsperado);
   assert.deepEqual(splitScript('DELIMITER //\nselect 1//\nselect 2//'), ['select 1', 'select 2']);
+});
+
+// Aba de consulta: sem DELIMITER o texto vai inteiro (o servidor separa); com DELIMITER vai quebrado em instruções.
+test('paraExecutar', () => {
+  const trg = 'CREATE TRIGGER a BEFORE UPDATE ON t FOR EACH ROW\nBEGIN\n  SET NEW.x = 1;\nEND';
+  assert.equal(paraExecutar(`select 1;\n${trg};`), `select 1;\n${trg};`, 'sem DELIMITER: texto inteiro');
+  assert.deepEqual(
+    paraExecutar(`-- tabela\r\nCREATE TABLE t (x int);\r\n\r\nDELIMITER $$\r\n${trg}$$\r\n${trg}$$\r\nDELIMITER ;\r\nselect 1;`),
+    ['CREATE TABLE t (x int)', trg, trg, 'select 1'],
+    'com DELIMITER: uma instrução por item',
+  );
+  assert.deepEqual(paraExecutar('DELIMITER $$\nDELIMITER ;\n'), [], 'só DELIMITER: nada a executar');
 });
 
 test('DivisorScript: DELIMITER só no começo da linha e fora de instrução', () => {

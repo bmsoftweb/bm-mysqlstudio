@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.5 — 2026-11-12
+
+- Aba de consulta: script com `DELIMITER` (triggers, procedures) roda como no cliente `mysql`. O texto ia inteiro para o servidor, que não conhece esse comando e dava erro 1064; agora, com uma linha `DELIMITER`, vai quebrado em instruções.
+
 ## 0.0.4 — 2026-11-11
 
 - Editor de tabela: renomear uma coluna e mudar o tipo dela sai num único `ALTER TABLE` (`CHANGE COLUMN` com a definição inteira). Em dois comandos, a falha do segundo deixava a coluna renomeada no banco e o Aplicar seguinte dava "Unknown column".

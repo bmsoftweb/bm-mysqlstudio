@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alvo, Conjunto, ehConjunto, executar, fecharSessao, linhas, texto, ErroApi } from '../lib/api';
 import { ARQ_SQL, SQL_BANCOS, colunasPk, criarArquivo, exportarCsv, milhar, q } from '../lib/db';
-import { formatSql, singleSelect, statementAt } from '../lib/sqlText';
+import { formatSql, paraExecutar, singleSelect, statementAt } from '../lib/sqlText';
 import { avisar, confirmarDescarte } from '../lib/avisos';
 import { Aba, useApp, useControleAba } from '../app/contexto';
 import { EditorSql, EditorSqlApi, EsquemaSql } from './EditorSql';
@@ -123,7 +123,8 @@ export const AbaConsulta: React.FC<{ aba: Extract<Aba, { tipo: 'consulta' }>; at
       s = ed.selecao();
     }
     const sql = s.texto || ed.texto();
-    if (!sql.trim()) return;
+    const lote = paraExecutar(sql);
+    if (!sql.trim() || !lote.length) return; // só linhas DELIMITER: nada a executar
     if (temAlteracoes() && !(await confirmarDescarte('O resultado tem alterações não salvas. Descartar?'))) return;
 
     setResultados([]);
@@ -138,7 +139,7 @@ export const AbaConsulta: React.FC<{ aba: Extract<Aba, { tipo: 'consulta' }>; at
     let falhou = false;
     const novos: Res[] = [];
     try {
-      const r = await executar(alvo, sql, { limite, sinal: cancelar.current.signal });
+      const r = await executar(alvo, lote, { limite, sinal: cancelar.current.signal });
       if (r.sessaoNova && jaRodou.current) {
         log += 'Atenção: a conexão desta aba foi reaberta pelo servidor. Variáveis de sessão, tabelas temporárias e transação aberta de antes não existem mais.\r\n';
       }
