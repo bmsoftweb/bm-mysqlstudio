@@ -6,10 +6,10 @@
  */
 import React, { forwardRef, useEffect, useImperativeHandle, useReducer, useRef, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Cog, Copy, Database, DatabaseBackup, Download, Eye, FileCode, Filter, Folder, History, Loader2, Pencil, Plug, Plus,
+  ChevronDown, ChevronRight, Cog, Copy, Database, DatabaseBackup, Download, Eraser, Eye, FileCode, Filter, Folder, History, Loader2, Pencil, Plug, Plus,
   RefreshCw, Search, Server, SlidersHorizontal, SquareFunction, Table2, TableProperties, Trash2, Unplug, Upload, Users, Activity, Zap, type LucideIcon,
 } from 'lucide-react';
-import { Alvo, Conexao, esquecerSenha, excluirConexao, linhas, rodar } from '../lib/api';
+import { Alvo, Conexao, esquecerSenha, excluirConexao, executar, linhas, rodar } from '../lib/api';
 import { SQL_BANCOS, baixar, getCreate, milhar, q } from '../lib/db';
 import { formatSql, isKeyword, dropParens, unquote } from '../lib/sqlText';
 import { dumpDb, exportTableCsv, runScript } from '../lib/backup';
@@ -556,6 +556,59 @@ export const Arvore = forwardRef<ArvoreApi, { conexoes: Conexao[]; onConexoes: (
     await recarregar(pastaDe(no, 'tables'));
   };
 
+  /** TRUNCATE de uma ou de várias tabelas do banco do nó: só depois de digitar o nome (uma) ou a quantidade (várias). */
+  const truncar = async (no: No, tabelas: string[]) => {
+    const uma = tabelas.length === 1;
+    const ok = await pedirTexto({
+      titulo: uma ? `Truncar ${no.banco}.${tabelas[0]}` : `Truncar ${tabelas.length} tabelas de ${no.banco}`,
+      subtitulo:
+        `Apaga todas as linhas ${uma ? 'da tabela' : 'das tabelas selecionadas'} e zera o auto incremento, sem como desfazer. A estrutura fica. ` +
+        (uma ? 'Digite o nome dela para confirmar.' : 'Digite a quantidade de tabelas para confirmar.'),
+      rotulo: uma ? 'Confirme o nome:' : 'Quantidade:',
+      botao: 'Truncar',
+      tom: 'perigo',
+      validar: (v) => (uma ? (v !== tabelas[0] ? 'O nome digitado não confere.' : '') : v !== String(tabelas.length) ? 'A quantidade digitada não confere.' : ''),
+    });
+    if (!ok) return;
+    // Um TRUNCATE por tabela (o MySQL não aceita várias num comando) e cada um já fica gravado: se um falhar, os
+    // de antes não voltam. feitas = quantas já foram.
+    let feitas = 0;
+    const executa = async (semFk: boolean): Promise<string | undefined> => {
+      const sqls = tabelas.slice(feitas).map((t) => `TRUNCATE TABLE ${q(no.banco)}.${q(t)}`);
+      // sem conferir as chaves: o SET vale só para esta chamada (o servidor zera a conexão depois do script)
+      const r = await executar(alvoDe(no), semFk ? ['SET FOREIGN_KEY_CHECKS = 0', ...sqls] : sqls);
+      feitas += Math.max(r.feitos - (semFk ? 1 : 0), 0);
+      return r.erro;
+    };
+    await comOcupado('Truncando...', async () => {
+      try {
+        let e = await executa(false);
+        // 1701: tabela apontada por chave estrangeira de outra não trunca, nem vazia. Só com a checagem desligada.
+        if (
+          e?.startsWith('Erro 1701') &&
+          (await confirmar({
+            titulo: 'Truncar sem conferir as chaves estrangeiras?',
+            mensagem:
+              `A tabela "${tabelas[feitas]}" é referenciada por chave estrangeira de outra tabela e o MySQL não deixa truncar.\n\n` +
+              'Truncar mesmo assim, com a checagem desligada? As linhas de outras tabelas que apontam para ela ficam sem o registro de origem.',
+            confirmar: 'Truncar',
+            tom: 'perigo',
+          }))
+        ) {
+          e = await executa(true);
+        }
+        if (feitas > 0) app.log(`${no.banco}: ${feitas === 1 ? 'tabela truncada' : `${feitas} tabelas truncadas`}: ${tabelas.slice(0, feitas).join(', ')}`);
+        if (e) {
+          const faltam = tabelas.length - feitas;
+          const resumo = uma ? '' : `\n\n${feitas === 0 ? 'Nenhuma tabela foi truncada.' : `Já truncadas: ${tabelas.slice(0, feitas).join(', ')}.`} ${faltam === 1 ? 'Faltou' : 'Faltaram'} ${faltam}.`;
+          avisar.erro(e + resumo);
+        } else avisar.sucesso(uma ? `Tabela ${tabelas[0]} truncada.` : `${feitas} tabelas truncadas.`);
+      } catch (e) {
+        erro(e); // conexão caiu, senha cancelada
+      }
+    });
+  };
+
   const precisa = (no: No | undefined, tipos: Tipo[], aviso: string): no is No => {
     if (no && tipos.includes(no.tipo)) return true;
     avisar.alerta(aviso);
@@ -690,6 +743,7 @@ export const Arvore = forwardRef<ArvoreApi, { conexoes: Conexao[]; onConexoes: (
         { texto: 'Gerar CREATE', icone: FileCode, onClick: () => void gerarCreates(no, varias) },
         { texto: 'Gerar SELECT', icone: FileCode, onClick: () => void gerarSelect(no, varias) },
         '-',
+        { texto: 'Truncar tabelas...', icone: Eraser, perigo: true, onClick: () => void truncar(no, varias) },
         { texto: 'Deletar tabelas...', icone: Trash2, perigo: true, onClick: () => void deletarTabelas(no, varias) },
       ];
     }
@@ -745,6 +799,7 @@ export const Arvore = forwardRef<ArvoreApi, { conexoes: Conexao[]; onConexoes: (
     }
     if (t === 'table' || t === 'db') {
       it.push('-');
+      if (t === 'table') it.push({ texto: 'Truncar tabela...', icone: Eraser, perigo: true, onClick: () => void truncar(no, [no.nome]) });
       add(t === 'db' ? 'Deletar banco...' : 'Deletar tabela...', 'deletar', Trash2, true);
     }
     if (t === 'conn') {

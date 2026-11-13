@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.6 — 2026-11-13
+
+- Explorador: "Truncar tabela..." no menu da tabela e "Truncar tabelas..." com várias selecionadas. Pede o nome (uma) ou a quantidade (várias) para confirmar. Tabela referenciada por chave estrangeira (erro 1701) pede uma segunda confirmação para truncar com a checagem desligada.
+
 ## 0.0.5 — 2026-11-12
 
 - Aba de consulta: script com `DELIMITER` (triggers, procedures) roda como no cliente `mysql`. O texto ia inteiro para o servidor, que não conhece esse comando e dava erro 1064; agora, com uma linha `DELIMITER`, vai quebrado em instruções.
