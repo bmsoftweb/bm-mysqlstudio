@@ -6,11 +6,12 @@
  * Os dados são de quem usa (linhas: Valor[][]): a grade avisa a alteração em onAlterar e não guarda nada.
  * Os índices de linha em todos os eventos são os de `linhas`, mesmo com a grade ordenada por uma coluna.
  *
+ * Rodapé: primeiro/anterior/próximo/último registro (o navegador do cxGrid) e "Registro X de N".
  * Teclado: setas, Home/End, PageUp/PageDown, Tab; Enter ou F2 edita (ou é só digitar); Esc cancela;
  * Delete deixa a célula nula; Ctrl+C copia a célula.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, ChevronRight } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import type { Valor } from '../lib/api';
 import { base64ParaBytes, milhar, tipoBlob } from '../lib/db';
 import { avisar } from '../lib/avisos';
@@ -509,6 +510,33 @@ export const Grade = forwardRef<GradeApi, GradeProps>(function Grade(props, ref)
         {total === 0 && <div className="p-6 text-center text-texto2">{props.vazio ?? 'Nenhum registro'}</div>}
       </div>
       <div className="shrink-0 h-6 flex items-center gap-3 px-2 bg-fundo2 border-t border-borda text-[11px] text-texto2">
+        <span className="flex items-center">
+          {(
+            [
+              ['Primeiro registro', ChevronsLeft, -total],
+              ['Registro anterior', ChevronLeft, -1],
+              ['Próximo registro', ChevronRight, 1],
+              ['Último registro', ChevronsRight, total],
+            ] as const
+          ).map(([dica, Icone, passo]) => (
+            <button
+              key={dica}
+              type="button"
+              title={dica}
+              tabIndex={-1}
+              disabled={!total}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (edicao && !confirmar()) return;
+                mover(passo, 0);
+                area.current?.focus();
+              }}
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-fundo hover:text-realce disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
+            >
+              <Icone className="w-3.5 h-3.5" />
+            </button>
+          ))}
+        </span>
         <span>{props.rodape ? props.rodape(posicaoFoco, total) : `Registro ${milhar(posicaoFoco)} de ${milhar(total)}`}</span>
         <span className="ml-auto flex items-center gap-3">{props.rodapeExtra}</span>
       </div>

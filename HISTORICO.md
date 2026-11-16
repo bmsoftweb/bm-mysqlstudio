@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.8 — 2026-11-16
+
+- Grades: botões de navegação no rodapé (primeiro, anterior, próximo e último registro), como o navegador do cxGrid no app desktop. Nas tabelas lidas aos poucos, "Último" vai até a última linha já carregada, e chegar nela busca as próximas.
+
 ## 0.0.7 — 2026-11-15
 
 - "Gerar com IA" (Claude) nas abas de consulta, view e function/procedure: o usuário descreve o que precisa e a IA escreve o SQL, o SELECT da view ou a rotina inteira (nome, parâmetros, opções e corpo). O resultado vai para o editor para revisão; nada é executado nem gravado sozinho. O que a IA assumiu aparece num aviso e na Saída.
