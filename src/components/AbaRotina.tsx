@@ -9,8 +9,8 @@
  * servidor faz o USE antes de rodar.
  */
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, FileCode, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { Alvo, escalar, linhas, rodar, texto } from '../lib/api';
+import { ArrowDown, ArrowUp, Check, FileCode, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Alvo, RespostaIa, escalar, linhas, rodar, texto } from '../lib/api';
 import { getCreate, lit, q } from '../lib/db';
 import { splitScript } from '../lib/sqlText';
 import { avisar, confirmar, confirmarDescarte } from '../lib/avisos';
@@ -19,6 +19,7 @@ import { Botao, CAMPO, Carregando, Divisor, SeparadorBarra, useTamanho } from '.
 import { ColunaGrade, Grade, GradeApi } from './Grade';
 import { EditorSql, EditorSqlApi } from './EditorSql';
 import { Toggle } from './Toggle';
+import { DialogoIa } from './DialogoIa';
 
 // ==========================================================
 // Peças usadas também pelo documento de view (AbaView)
@@ -190,6 +191,8 @@ export const AbaRotina: React.FC<{ aba: Extract<Aba, { tipo: 'rotina' }>; ativa:
   const [info, setInfo] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [altura, arrastar] = useTamanho(250, 120);
+  /** Diálogo da IA aberto, com o CREATE de agora (ou '' numa rotina nova ainda não mexida) */
+  const [ia, setIa] = useState<{ atual: string } | null>(null);
 
   const grade = useRef<GradeApi>(null);
   const editor = useRef<EditorSqlApi>(null);
@@ -358,6 +361,31 @@ export const AbaRotina: React.FC<{ aba: Extract<Aba, { tipo: 'rotina' }>; ativa:
     [pars[r], pars[t]] = [pars[t], pars[r]];
     mudar({ pars });
     grade.current?.focar(t);
+  };
+
+  // ----------------------------------------------------------
+  // Gerar com IA: preenche os campos (parâmetros, opções e corpo); só vai para o banco no Aplicar
+  // ----------------------------------------------------------
+  const abrirIa = () => {
+    grade.current?.confirmarEdicao();
+    const c = atual.current;
+    // Rotina nova ainda como veio: não há o que alterar, a IA parte só do pedido
+    setIa({ atual: antigo?.nome !== '' || temAlteracoes() ? createSql(funcao, c, c.nome.trim() || 'nova') : '' });
+  };
+
+  const usarIa = (r: RespostaIa) => {
+    const c = atual.current;
+    const pars = (r.parametros ?? []).map((p) => [p.nome, p.tipo, funcao ? 'IN' : p.modo]);
+    mudar({
+      // o nome sugerido só numa rotina ainda sem nome
+      nome: c.nome.trim() === '' && r.nome ? r.nome : c.nome,
+      comentario: r.comentario || c.comentario,
+      pars: funcao ? [[RETORNO, r.retorno || c.pars[0][P_TIPO], ''], ...pars] : pars,
+      determ: Boolean(r.deterministico),
+      acesso: r.acesso && ACESSOS.includes(r.acesso) ? r.acesso : c.acesso,
+    });
+    porCorpo(r.sql.trimEnd());
+    setInfo(`${pars.length} parâmetro(s)`);
   };
 
   // ----------------------------------------------------------
@@ -619,8 +647,32 @@ export const AbaRotina: React.FC<{ aba: Extract<Aba, { tipo: 'rotina' }>; ativa:
         </Botao>
         <SeparadorBarra />
         <Toggle checked={raw} onChange={() => void alternarRaw()} label="Raw" title="Editar o CREATE inteiro como texto" disabled={ocupado} size="sm" />
+        <SeparadorBarra />
+        {/* No Raw os campos somem: a IA preenche os campos, então fica para o modo normal */}
+        <Botao
+          icone={Sparkles}
+          onClick={abrirIa}
+          disabled={ocupado || raw}
+          title={raw ? 'Desligue o Raw para gerar com IA' : `Descreva a ${tipo.toLowerCase()} e a IA preenche os parâmetros, as opções e o corpo`}
+        >
+          Gerar com IA
+        </Botao>
         <span className="ml-auto pr-3 min-w-0 truncate text-xs text-texto2">{info}</span>
       </div>
+
+      {ia && (
+        <DialogoIa
+          tipo={funcao ? 'funcao' : 'procedure'}
+          conexao={aba.conexao}
+          banco={banco}
+          atual={ia.atual}
+          onPronto={usarIa}
+          onFechar={() => {
+            setIa(null);
+            editor.current?.focar();
+          }}
+        />
+      )}
     </div>
   );
 };

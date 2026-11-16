@@ -1,7 +1,7 @@
 {
   "name": "mysqlstudio",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -12,6 +12,7 @@
     "test": "tsx --test src/lib/*.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@codemirror/autocomplete": "^6.18.0",
     "@codemirror/commands": "^6.8.0",
     "@codemirror/lang-sql": "^6.8.0",

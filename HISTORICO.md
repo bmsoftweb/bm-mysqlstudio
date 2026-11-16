@@ -2,6 +2,12 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.7 — 2026-11-15
+
+- "Gerar com IA" (Claude) nas abas de consulta, view e function/procedure: o usuário descreve o que precisa e a IA escreve o SQL, o SELECT da view ou a rotina inteira (nome, parâmetros, opções e corpo). O resultado vai para o editor para revisão; nada é executado nem gravado sozinho. O que a IA assumiu aparece num aviso e na Saída.
+- A estrutura do banco (tabelas, views, colunas, chaves, comentários e rotinas) é lida uma vez por conexão + banco e enviada junto com cada pedido. Relê sozinha depois de mudanças de estrutura feitas no app; "Reler estrutura" no diálogo cobre as feitas por fora.
+- Nova variável `ANTHROPIC_API_KEY` (ver `.env.example`): sem ela, só o botão da IA avisa que falta configurar.
+
 ## 0.0.6 — 2026-11-13
 
 - Explorador: "Truncar tabela..." no menu da tabela e "Truncar tabelas..." com várias selecionadas. Pede o nome (uma) ou a quantidade (várias) para confirmar. Tabela referenciada por chave estrangeira (erro 1701) pede uma segunda confirmação para truncar com a checagem desligada.

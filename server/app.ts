@@ -7,6 +7,7 @@ import { pool } from './db.js';
 import { SEGREDO } from './segredo.js';
 import { createConexoesRouter } from './conexoes.js';
 import { createAlvoRouter } from './alvo.js';
+import { createIaRouter } from './ia.js';
 
 // ==========================================================
 // Sessão: token "usuarioId.expiracao.assinatura" (HMAC-SHA256), como no crmWeb
@@ -149,6 +150,7 @@ export function createApp() {
 
   app.use(createConexoesRouter());
   app.use(createAlvoRouter());
+  app.use(createIaRouter());
 
   app.use('/api', (_req: Request, res: Response) => {
     res.status(404).json({ erro: 'Rota não encontrada.' });

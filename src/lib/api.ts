@@ -225,6 +225,27 @@ export async function executar(alvo: Alvo, sql: string | string[], opcoes: Opcoe
   }
 }
 
+// ==========================================================
+// IA (ver src/lib/ia.ts)
+// ==========================================================
+export type TipoIa = 'sql' | 'view' | 'funcao' | 'procedure';
+
+/** O que a IA devolve. Os campos depois de observacao só vêm nas rotinas (em sql, o corpo de BEGIN a END). */
+export interface RespostaIa {
+  nome: string;
+  sql: string;
+  /** O que a IA assumiu ou não conseguiu fazer; '' se nada */
+  observacao: string;
+  comentario?: string;
+  parametros?: { nome: string; tipo: string; modo: string }[];
+  retorno?: string;
+  deterministico?: boolean;
+  acesso?: string;
+}
+
+export const pedirIa = (corpo: { tipo: TipoIa; pedido: string; estrutura: string; atual?: string }, sinal?: AbortSignal) =>
+  chamar<RespostaIa>('POST', '/api/ia', corpo, sinal);
+
 /** Valor como texto: '' para nulo e para binário (use so em metadados e textos). */
 export function texto(v: Valor): string {
   if (v === null) return '';

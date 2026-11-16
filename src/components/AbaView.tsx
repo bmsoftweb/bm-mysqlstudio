@@ -9,13 +9,14 @@
  * servidor faz o USE antes de rodar.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, FileCode, Pencil, RefreshCw, Table } from 'lucide-react';
+import { Check, FileCode, Pencil, RefreshCw, Sparkles, Table } from 'lucide-react';
 import { Alvo, Conjunto, consulta, escalar, linhas, rodar } from '../lib/api';
 import { getCreate, milhar, q, versaoCurta } from '../lib/db';
 import { dropParens, formatSql, splitScript, unquote } from '../lib/sqlText';
 import { avisar, confirmar, confirmarDescarte } from '../lib/avisos';
 import { Aba, useApp, useControleAba } from '../app/contexto';
-import { Abas, Botao, CAMPO, Carregando, ItemAba } from './ui';
+import { Abas, Botao, CAMPO, Carregando, ItemAba, SeparadorBarra } from './ui';
+import { DialogoIa } from './DialogoIa';
 import { GradeConjunto } from './GradeConjunto';
 import { EditorSql, EditorSqlApi } from './EditorSql';
 import { Toggle } from './Toggle';
@@ -103,6 +104,7 @@ export const AbaView: React.FC<{ aba: Extract<Aba, { tipo: 'view' }>; ativa: boo
   const [ocupado, setOcupado] = useState(false);
   const [dados, setDados] = useState<Conjunto | null>(null);
   const [buscando, setBuscando] = useState(false);
+  const [ia, setIa] = useState(false);
 
   const editor = useRef<EditorSqlApi>(null);
   const campoNome = useRef<HTMLInputElement>(null);
@@ -367,8 +369,38 @@ export const AbaView: React.FC<{ aba: Extract<Aba, { tipo: 'view' }>; ativa: boo
           <Botao icone={FileCode} onClick={scriptDasAlteracoes} disabled={ocupado}>
             Script das alterações
           </Botao>
+          <SeparadorBarra />
+          <Botao
+            icone={Sparkles}
+            onClick={() => {
+              voltarAoTexto(false);
+              setIa(true);
+            }}
+            disabled={ocupado}
+            title="Descreva a view e a IA escreve o SELECT"
+          >
+            Gerar com IA
+          </Botao>
           <span className="ml-auto pr-3 min-w-0 truncate text-xs text-texto2">{info}</span>
         </div>
+      )}
+
+      {ia && (
+        <DialogoIa
+          tipo="view"
+          conexao={aba.conexao}
+          banco={banco}
+          atual={corpoSql(campos.corpo)}
+          onPronto={(r) => {
+            // O SELECT entra no editor (Ctrl+Z desfaz); o nome sugerido só numa view ainda sem nome
+            if (campos.nome.trim() === '' && r.nome) mudar({ nome: r.nome });
+            editor.current?.definirTexto(r.sql.trimEnd());
+          }}
+          onFechar={() => {
+            setIa(false);
+            editor.current?.focar();
+          }}
+        />
       )}
     </div>
   );

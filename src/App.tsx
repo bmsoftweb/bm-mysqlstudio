@@ -13,6 +13,7 @@ import {
 import { Tema, aplicarTema, lerSessao, limparSessao, salvarSessao, temaInicial } from './lib/sessao';
 import { avisar, confirmarDescarte } from './lib/avisos';
 import { escolherArquivo } from './lib/db';
+import { esquecerEstrutura } from './lib/ia';
 import { Aba, AppApi, AppContexto, controles } from './app/contexto';
 import { Avisos } from './components/Avisos';
 import { Login } from './components/Login';
@@ -243,7 +244,10 @@ const Principal: React.FC<{ usuario: UsuarioSessao; tema: Tema; onTema: () => vo
             })
             .map((a) => a.id),
         ),
-      atualizarArvore: (conexao, banco, pasta) => arvore.current?.atualizar(conexao, banco, pasta),
+      atualizarArvore: (conexao, banco, pasta) => {
+        esquecerEstrutura(conexao, banco); // quem chama acabou de mudar a estrutura: a IA lê de novo no próximo pedido
+        arvore.current?.atualizar(conexao, banco, pasta);
+      },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [log]);

@@ -14,7 +14,10 @@ import { Aba, useApp, useControleAba } from '../app/contexto';
 import { EditorSql, EditorSqlApi, EsquemaSql } from './EditorSql';
 import { GradeConjunto } from './GradeConjunto';
 import { GradeDados, GradeDadosApi } from './GradeDados';
-import { Abas, CAMPO, Divisor, useTamanho } from './ui';
+import { Sparkles } from 'lucide-react';
+import { esquecerEstrutura } from '../lib/ia';
+import { Abas, Botao, CAMPO, Divisor, useTamanho } from './ui';
+import { DialogoIa } from './DialogoIa';
 
 interface Res {
   id: number;
@@ -62,6 +65,8 @@ export const AbaConsulta: React.FC<{ aba: Extract<Aba, { tipo: 'consulta' }>; at
   const [situacao, setSituacao] = useState('');
   const [tempo, setTempo] = useState('');
   const [alturaEditor, arrastar] = useTamanho(300, 80);
+  /** Diálogo da IA aberto, com o trecho que estava selecionado no editor */
+  const [ia, setIa] = useState<{ atual: string } | null>(null);
   const editor = useRef<EditorSqlApi>(null);
   const gradeEditavel = useRef<GradeDadosApi>(null);
   const cancelar = useRef<AbortController | null>(null);
@@ -157,7 +162,10 @@ export const AbaConsulta: React.FC<{ aba: Extract<Aba, { tipo: 'consulta' }>; at
       // USE dentro do próprio SQL: o combo "Banco", a barra de status e o autocompletar acompanham
       if (r.banco && r.banco !== banco) setBanco(r.banco);
       // Estrutura mudou: o autocompletar relê as tabelas na próxima vez
-      if (/\b(create|alter|drop|rename)\b/i.test(sql)) esquemas.delete(`${aba.conexao}|${r.banco || banco}`);
+      if (/\b(create|alter|drop|rename)\b/i.test(sql)) {
+        esquemas.delete(`${aba.conexao}|${r.banco || banco}`);
+        esquecerEstrutura(aba.conexao, r.banco || banco);
+      }
       if (novos.length === 1 && !r.erro) novos[0].editavel = await origemEditavel(sql, novos[0].conjunto);
     } catch (e) {
       falhou = true;
@@ -178,6 +186,12 @@ export const AbaConsulta: React.FC<{ aba: Extract<Aba, { tipo: 'consulta' }>; at
     if (!ed) return;
     if (!ed.selecao().texto) ed.selecionarTudo();
     ed.substituirSelecao(formatSql(ed.selecao().texto)); // pela seleção: Ctrl+Z desfaz
+  };
+
+  /** Gerar com IA: o trecho selecionado vai junto (para pedir uma alteração nele) e é trocado pelo resultado. */
+  const abrirIa = () => {
+    if (!banco) return avisar.alerta('Escolha o banco da aba antes de pedir à IA.');
+    setIa({ atual: editor.current?.selecao().texto ?? '' });
   };
 
   /** Troca o banco da aba (combo "Banco"): USE na conexão da aba. */
@@ -289,7 +303,25 @@ export const AbaConsulta: React.FC<{ aba: Extract<Aba, { tipo: 'consulta' }>; at
             </option>
           ))}
         </select>
+        <Botao icone={Sparkles} onClick={abrirIa} className="ml-auto" title="Descreva o que precisa e a IA escreve o SQL">
+          Gerar com IA
+        </Botao>
       </div>
+      {ia && (
+        <DialogoIa
+          tipo="sql"
+          conexao={aba.conexao}
+          banco={banco}
+          atual={ia.atual}
+          dica="Para alterar um SQL que já existe, selecione o trecho no editor antes de abrir."
+          // Pela seleção: entra no lugar do trecho selecionado (ou onde está o cursor) e o Ctrl+Z desfaz
+          onPronto={(r) => editor.current?.substituirSelecao(r.sql.trimEnd() + '\n')}
+          onFechar={() => {
+            setIa(null);
+            editor.current?.focar();
+          }}
+        />
+      )}
       <div style={{ height: alturaEditor }} className="shrink-0 flex min-h-0">
         <EditorSql
           ref={editor}
