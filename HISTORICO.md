@@ -2,6 +2,11 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.9 — 2026-11-17
+
+- Dados da tabela: "Primeiro" e "Último" (botões do rodapé e Ctrl+Home/Ctrl+End) vão ao primeiro e ao último registro reais da tabela, não só aos já carregados. O Último abre direto a última página e conta as linhas ("Registro 400.000 de 400.000"); dali, as anteriores vêm ao rolar para cima.
+- Campos no padrão do freteMicar: moldura cinza de 1px com cantos arredondados, além da barra âmbar (obrigatório) ou verde (opcional) à esquerda. A lista aberta do select tem a mesma moldura (Chrome/Edge 135+), com o texto centralizado no campo.
+
 ## 0.0.8 — 2026-11-16
 
 - Grades: botões de navegação no rodapé (primeiro, anterior, próximo e último registro), como o navegador do cxGrid no app desktop. Nas tabelas lidas aos poucos, "Último" vai até a última linha já carregada, e chegar nela busca as próximas.

@@ -3,12 +3,13 @@
  * editável da aba SQL. As alterações ficam pendentes (linha nova em verde, alterada em âmbar, excluída riscada)
  * até Salvar, que grava tudo numa transação só: ou entra tudo, ou nada.
  *
- * Tabela: lida aos poucos pela chave primária, conforme a grade desce ("Registro 3 de 500+").
+ * Tabela: lida aos poucos pela chave primária, conforme a grade desce ("Registro 3 de 500+"). O Último abre direto
+ * a última página e conta as linhas ("Registro 400.000 de 400.000"); dali, as anteriores vêm ao rolar para cima.
  * Resultado da aba SQL: as linhas já vieram na consulta; Recarregar roda a consulta de novo.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ClipboardPaste, Copy, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
-import { Alvo, Campo, Conjunto, Feito, Valor, consulta, ehConjunto, executar, linhas as lerLinhas, texto } from '../lib/api';
+import { Alvo, Campo, Conjunto, Feito, Valor, consulta, ehConjunto, escalar, executar, linhas as lerLinhas, texto } from '../lib/api';
 import { base64ParaBytes, bytesParaHex, ehBinario, ehGrande, ehNumero, exportarCsv, lerGrande, lit, milhar, novoIdApp, q, valoresEnum, FLAG } from '../lib/db';
 import { colsDiff } from '../lib/compareLogic';
 import { avisar, confirmar, confirmarDescarte } from '../lib/avisos';
@@ -47,6 +48,8 @@ interface Dados {
   origs: (Valor[] | null)[];
   /** Não há mais linhas para buscar */
   fim: boolean;
+  /** Linhas da tabela antes de linhas[0]: o Último abre o fim da tabela, e as anteriores vêm ao rolar para cima */
+  inicio: number;
 }
 
 /** Linhas de information_schema.columns: nome, tipo, chave, extra */
@@ -106,17 +109,27 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
 
   const temAlteracoes = () => Boolean(atual.current?.marcas.some((m) => m !== ''));
 
-  const ordem = (chave: string[]) => (chave.length ? ` ORDER BY ${chave.map(q).join(', ')}` : '');
-
-  const buscar = async (cols: Estrutura, depoisDe: Valor[] | null, deslocamento: number): Promise<Conjunto> => {
+  /**
+   * Uma página da tabela pela chave primária: depois de uma chave, antes de uma chave ou a última (doFim).
+   * Sem chave primária, pela posição (deslocamento). As linhas voltam sempre na ordem da chave.
+   */
+  const buscar = async (
+    cols: Estrutura,
+    limite: { depoisDe?: Valor[] | null; antesDe?: Valor[]; doFim?: boolean },
+    deslocamento: number,
+    quantos = PAGINA,
+  ): Promise<Conjunto> => {
     const chave = cols.filter((r) => r[2] === 'PRI').map((r) => r[0]);
-    let onde = '';
-    if (chave.length && depoisDe) {
-      // (a, b) > (x, y): continua de onde parou mesmo que linhas tenham sido incluídas ou excluídas no meio
-      onde = ` WHERE (${chave.map(q).join(', ')}) > (${depoisDe.map((v) => (v === null ? 'NULL' : typeof v === 'object' ? (v.bin ? '0x' + bytesParaHex(base64ParaBytes(v.bin)) : "''") : lit(String(v)))).join(', ')})`;
-    }
-    const sql = `SELECT * FROM ${nomeTabela}${onde}${ordem(chave)} LIMIT ${PAGINA}${chave.length ? '' : ` OFFSET ${deslocamento}`}`;
-    return consulta(alvo, sql, undefined, PAGINA);
+    const valores = (vs: Valor[]) => vs.map((v) => (v === null ? 'NULL' : typeof v === 'object' ? (v.bin ? '0x' + bytesParaHex(base64ParaBytes(v.bin)) : "''") : lit(String(v)))).join(', ');
+    // (a, b) > (x, y): continua de onde parou mesmo que linhas tenham sido incluídas ou excluídas no meio
+    const ref = limite.depoisDe ? ['>', limite.depoisDe] as const : limite.antesDe ? ['<', limite.antesDe] as const : null;
+    const onde = chave.length && ref ? ` WHERE (${chave.map(q).join(', ')}) ${ref[0]} (${valores(ref[1])})` : '';
+    // Para trás (anteriores ou a última página): de trás para frente no banco e desvirada aqui
+    const desc = chave.length > 0 && Boolean(limite.antesDe || limite.doFim);
+    const ordem = chave.length ? ` ORDER BY ${chave.map((c) => q(c) + (desc ? ' DESC' : '')).join(', ')}` : '';
+    const sql = `SELECT * FROM ${nomeTabela}${onde}${ordem} LIMIT ${quantos}${chave.length ? '' : ` OFFSET ${deslocamento}`}`;
+    const c = await consulta(alvo, sql, undefined, quantos);
+    return desc ? { ...c, linhas: c.linhas.slice().reverse() } : c;
   };
 
   const guardarChave = (c: Conjunto, cols: Estrutura) => {
@@ -135,7 +148,7 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
       let c: Conjunto;
       if (resultado) c = resultado;
       else {
-        c = await buscar(cols, null, 0);
+        c = await buscar(cols, {}, 0);
         guardarChave(c, cols);
       }
       mudar(() => ({
@@ -144,6 +157,7 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
         marcas: c.linhas.map((): Marca => ''),
         origs: c.linhas.map(() => null),
         fim: resultado ? true : !c.truncado && c.linhas.length < PAGINA,
+        inicio: 0,
       }));
       setInfo(resultado?.truncado ? 'Resultado cortado no limite de linhas.' : ''); // o aviso anterior era dos dados de antes
     } catch (e) {
@@ -165,7 +179,7 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
     buscando.current = true;
     try {
       const lidas = d.marcas.filter((m) => m !== 'N').length;
-      const c = await buscar(estrutura, ultimaChave.current, lidas);
+      const c = await buscar(estrutura, { depoisDe: ultimaChave.current }, d.inicio + lidas);
       guardarChave(c, estrutura);
       mudar((x) =>
         x && {
@@ -181,6 +195,89 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
     } finally {
       buscando.current = false;
     }
+  };
+
+  /** A página antes da primeira linha carregada, quando a grade sobe (depois do Último) */
+  const buscarAntes = async () => {
+    const d = atual.current;
+    if (!d || d.inicio <= 0 || buscando.current || resultado) return;
+    const i0 = d.marcas.findIndex((m) => m !== 'N');
+    if (pk.length && i0 < 0) return;
+    buscando.current = true;
+    try {
+      let c: Conjunto;
+      let inicio: number;
+      if (pk.length) {
+        const linha = d.origs[i0] ?? d.linhas[i0];
+        c = await buscar(estrutura, { antesDe: pk.map((n) => linha[indiceDe(d.campos, n)] ?? null) }, 0);
+        // O COUNT do Último pode ter mudado desde então: o começo de verdade é a página que veio incompleta
+        inicio = !c.truncado && c.linhas.length < PAGINA ? 0 : Math.max(1, d.inicio - c.linhas.length);
+      } else {
+        // ponytail: sem chave, pela posição; página cortada pelo tamanho deixaria um buraco entre ela e as carregadas
+        inicio = Math.max(0, d.inicio - PAGINA);
+        c = await buscar(estrutura, {}, inicio, d.inicio - inicio);
+      }
+      mudar((x) =>
+        x && {
+          ...x,
+          linhas: [...c.linhas, ...x.linhas],
+          marcas: [...c.linhas.map((): Marca => ''), ...x.marcas],
+          origs: [...c.linhas.map(() => null), ...x.origs],
+          inicio,
+        },
+      );
+    } catch (e) {
+      avisar.erro(e);
+    } finally {
+      buscando.current = false;
+    }
+  };
+
+  /** Primeiro registro da tabela: se o começo não está carregado (depois do Último), abre a tabela de novo */
+  const irPrimeiro = async () => {
+    const d = atual.current;
+    if (!d) return;
+    if (d.inicio > 0) {
+      if (temAlteracoes() && !(await confirmarDescarte('Descartar alterações não salvas?'))) return;
+      await carregar();
+    }
+    setTimeout(() => grade.current?.focar(0), 0);
+  };
+
+  /** Último registro da tabela: abre direto a última página (sem ler o meio) e conta as linhas para o rodapé */
+  const irUltimo = async () => {
+    const d = atual.current;
+    if (!d || buscando.current) return;
+    if (!d.fim) {
+      if (temAlteracoes() && !(await confirmarDescarte('Descartar alterações não salvas?'))) return;
+      buscando.current = true;
+      setOcupado(true);
+      try {
+        // ponytail: COUNT(*) exato; em tabela de dezenas de milhões ele demora, e o table_rows do information_schema é só estimativa
+        const n = Number(await escalar(alvo, `SELECT COUNT(*) FROM ${nomeTabela}`));
+        const desloc = Math.max(0, n - PAGINA);
+        const c = await buscar(estrutura, { doFim: true }, desloc);
+        guardarChave(c, estrutura);
+        mudar((x) =>
+          x && {
+            ...x,
+            linhas: c.linhas,
+            marcas: c.linhas.map((): Marca => ''),
+            origs: c.linhas.map(() => null),
+            // Sem chave, a página cortada pelo tamanho não chegou ao fim: o resto vem ao rolar
+            fim: pk.length > 0 || !c.truncado,
+            inicio: pk.length ? Math.max(0, n - c.linhas.length) : desloc,
+          },
+        );
+      } catch (e) {
+        avisar.erro(e);
+        return;
+      } finally {
+        buscando.current = false;
+        setOcupado(false);
+      }
+    }
+    setTimeout(() => grade.current?.focar((atual.current?.linhas.length ?? 1) - 1), 0);
   };
 
   const recarregar = async () => {
@@ -324,7 +421,7 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
     if (!d) return avisar.alerta('Nenhum resultado para exportar.');
     exportarCsv(`${tabela || 'resultado'}.csv`, d.campos.map((c) => c.nome), d.linhas.map((l) => l.map(texto)))
       .then((ok) => {
-        if (ok && !d.fim) avisar.alerta(`Exportados só os ${milhar(d.linhas.length)} registros já carregados. Para a tabela inteira, use Exportar dados da tabela (CSV) no explorador.`);
+        if (ok && (!d.fim || d.inicio > 0)) avisar.alerta(`Exportados só os ${milhar(d.linhas.length)} registros já carregados. Para a tabela inteira, use Exportar dados da tabela (CSV) no explorador.`);
       })
       .catch(avisar.erro);
   };
@@ -445,6 +542,10 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
         onInserir={() => inserir()}
         onMenu={(e, l) => setMenu({ x: e.clientX, y: e.clientY, l })}
         onFimDaRolagem={() => void buscarMais()}
+        onInicioDaRolagem={() => void buscarAntes()}
+        deslocamento={dados.inicio}
+        onPrimeiro={resultado ? undefined : () => void irPrimeiro()}
+        onUltimo={resultado ? undefined : () => void irUltimo()}
         classeLinha={(l) =>
           dados.marcas[l] === 'N'
             ? '!bg-emerald-50 dark:!bg-emerald-950/40'
@@ -455,7 +556,7 @@ export const GradeDados = forwardRef<GradeDadosApi, GradeDadosProps>(function Gr
                 : undefined
         }
         rodape={(pos, total) =>
-          pos > 0 && dados.marcas[pos - 1] === 'N' ? 'Novo registro' : `Registro ${milhar(pos)} de ${milhar(total)}${dados.fim ? '' : '+'}`
+          pos > 0 && dados.marcas[pos - 1] === 'N' ? 'Novo registro' : `Registro ${milhar(dados.inicio + pos)} de ${milhar(dados.inicio + total)}${dados.fim ? '' : '+'}`
         }
         lerGrande={(l, c) => {
           const campo = dados.campos[c];

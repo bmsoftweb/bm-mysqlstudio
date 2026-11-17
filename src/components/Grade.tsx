@@ -59,6 +59,16 @@ export interface GradeProps {
   ordenavel?: boolean;
   /** Chegou perto do fim da rolagem: hora de buscar mais linhas */
   onFimDaRolagem?: () => void;
+  /** Chegou perto do topo e há linhas antes das carregadas (deslocamento > 0): hora de buscar as anteriores */
+  onInicioDaRolagem?: () => void;
+  /**
+   * Quantas linhas da fonte vêm antes de linhas[0] (grade que mostra só um pedaço). Quando ele diminui com as linhas
+   * antigas empurradas para baixo (linhas buscadas antes), a grade mantém a rolagem e o foco na mesma linha.
+   */
+  deslocamento?: number;
+  /** Botões e Ctrl+Home/Ctrl+End: no lugar de ir à primeira/última linha carregada (quem busca o resto é quem usa) */
+  onPrimeiro?: () => void;
+  onUltimo?: () => void;
   /** Texto do rodapé no lugar de "Registro X de N" */
   rodape?: (posicao: number, total: number) => React.ReactNode;
   /** Conteúdo à direita no rodapé */
@@ -188,8 +198,10 @@ export const Grade = forwardRef<GradeApi, GradeProps>(function Grade(props, ref)
   const primeira = Math.max(0, Math.floor(rolagem / ALTURA) - 6);
   const ultima = Math.min(total, Math.ceil((rolagem + alturaArea) / ALTURA) + 6);
 
-  // Pedido de mais linhas, uma vez por tamanho da lista
+  // Pedido de mais linhas, uma vez por tamanho da lista (e das anteriores, uma vez por deslocamento)
   const pedidoEm = useRef(-1);
+  const pedidoAntesEm = useRef(-1);
+  const deslocamento = props.deslocamento ?? 0;
   const aoRolar = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     setRolagem(el.scrollTop);
@@ -197,7 +209,26 @@ export const Grade = forwardRef<GradeApi, GradeProps>(function Grade(props, ref)
       pedidoEm.current = total;
       onFimDaRolagem();
     }
+    if (props.onInicioDaRolagem && deslocamento > 0 && el.scrollTop < 300 && pedidoAntesEm.current !== deslocamento) {
+      pedidoAntesEm.current = deslocamento;
+      props.onInicioDaRolagem();
+    }
   };
+
+  // Linhas buscadas antes das carregadas: a mesma linha continua na tela e focada
+  const anterior = useRef({ deslocamento, primeira: linhas[0] });
+  useLayoutEffect(() => {
+    const a = anterior.current;
+    anterior.current = { deslocamento, primeira: linhas[0] };
+    const n = a.deslocamento - deslocamento;
+    if (n <= 0 || !a.primeira || linhas[n] !== a.primeira) return; // não foi um acréscimo no começo
+    if (area.current) area.current.scrollTop += n * ALTURA;
+    if (foco) {
+      setFoco({ l: foco.l + n, c: foco.c });
+      onFoco?.(foco.l + n, foco.c);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deslocamento, linhas]);
 
   const editaCelula = (l: number, c: number) => {
     const col = colunas[c];
@@ -303,8 +334,8 @@ export const Grade = forwardRef<GradeApi, GradeProps>(function Grade(props, ref)
       case 'ArrowLeft': mover(0, -1); break;
       case 'PageDown': mover(pagina, 0); break;
       case 'PageUp': mover(-pagina, 0); break;
-      case 'Home': if (e.ctrlKey) mover(-total, -colunas.length * 2); else mover(0, -colunas.length * 2); break;
-      case 'End': if (e.ctrlKey) mover(total, colunas.length * 2); else mover(0, colunas.length * 2); break;
+      case 'Home': if (e.ctrlKey) (props.onPrimeiro ? props.onPrimeiro() : mover(-total, -colunas.length * 2)); else mover(0, -colunas.length * 2); break;
+      case 'End': if (e.ctrlKey) (props.onUltimo ? props.onUltimo() : mover(total, colunas.length * 2)); else mover(0, colunas.length * 2); break;
       case 'Tab': {
         // Só sai da grade depois da última célula (ou antes da primeira)
         if (!f || !total) return;
@@ -518,7 +549,7 @@ export const Grade = forwardRef<GradeApi, GradeProps>(function Grade(props, ref)
               ['Próximo registro', ChevronRight, 1],
               ['Último registro', ChevronsRight, total],
             ] as const
-          ).map(([dica, Icone, passo]) => (
+          ).map(([dica, Icone, passo], i) => (
             <button
               key={dica}
               type="button"
@@ -528,8 +559,10 @@ export const Grade = forwardRef<GradeApi, GradeProps>(function Grade(props, ref)
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 if (edicao && !confirmar()) return;
-                mover(passo, 0);
                 area.current?.focus();
+                if (i === 0 && props.onPrimeiro) props.onPrimeiro();
+                else if (i === 3 && props.onUltimo) props.onUltimo();
+                else mover(passo, 0);
               }}
               className="h-5 w-5 flex items-center justify-center rounded hover:bg-fundo hover:text-realce disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
             >

@@ -79,16 +79,16 @@ body {
 }
 
 /* ==========================================
-   CAMPOS DE ENTRADA (padrão do meuConsultorioWeb / crmWeb)
+   CAMPOS DE ENTRADA (padrão do freteMicar / bm-estoque)
    ==========================================
-   Sem moldura: só uma barra de 2px à esquerda, âmbar se obrigatório (atributo required) e verde se opcional.
-   Em foco, o fundo escurece; sem anel. Ficam de fora os controles que não são de digitação e os editores de
-   célula das grades (.sem-barra). */
+   Moldura de 1px cinza translúcida com cantos arredondados e barra de 2px à esquerda: âmbar se obrigatório
+   (atributo required), verde se opcional. Em foco, o fundo escurece; sem anel. Ficam de fora os controles que
+   não são de digitação e os editores de célula das grades (.sem-barra). */
 :where(input, select, textarea):where(:not([type="checkbox"], [type="radio"], [type="color"], [type="file"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="hidden"], .sem-barra)) {
-  border: 0 solid transparent !important;
+  border: 1px solid rgba(120, 113, 108, 0.35) !important;
   border-left-width: 2px !important;
   border-left-color: #10b981 !important; /* opcional */
-  border-radius: 0 !important;
+  border-radius: 0.375rem !important;
 }
 
 :where(input, select, textarea):where(:not([type="checkbox"], [type="radio"], [type="color"], [type="file"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="hidden"], .sem-barra)):where(:required) {
@@ -103,6 +103,44 @@ body {
 
 .dark :where(input, select, textarea):focus {
   background-image: linear-gradient(rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.07)) !important;
+}
+
+/* Lista aberta do select com a mesma moldura arredondada (select customizável: Chrome/Edge 135+; os outros
+   navegadores mostram a lista nativa). A lista das células da grade continua a nativa. */
+@supports (appearance: base-select) {
+  select:not([multiple], .sem-barra),
+  select:not([multiple], .sem-barra)::picker(select) {
+    appearance: base-select;
+  }
+  /* O base-select vira flex com o texto no topo: centraliza na altura do campo */
+  select:not([multiple], .sem-barra) {
+    align-items: center;
+  }
+  select:not([multiple], .sem-barra)::picker(select) {
+    border: 1px solid rgba(120, 113, 108, 0.35);
+    border-radius: 0.375rem;
+    margin-top: 2px;
+    padding: 4px 0;
+    background: var(--fundo);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+  }
+  select:not([multiple], .sem-barra) option {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    color: var(--texto);
+  }
+  select:not([multiple], .sem-barra) option::checkmark {
+    display: none;
+  }
+  select:not([multiple], .sem-barra) option:hover,
+  select:not([multiple], .sem-barra) option:focus-visible {
+    background: var(--selecao2);
+    outline: none;
+  }
+  select:not([multiple], .sem-barra) option:checked {
+    background: var(--realce);
+    color: #fff;
+  }
 }
 
 /* Barras de rolagem discretas nos painéis */

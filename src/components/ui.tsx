@@ -2,7 +2,7 @@
  * Peças de interface do app (o equivalente aos helpers de tela do uConnect.pas: SetupForm, AddHeader, NewToolBar,
  * AddSheetLines, FlatTabs...).
  *
- * - CAMPO: classes do campo de digitação padrão (28px de altura; a barra da esquerda vem do index.css)
+ * - CAMPO: classes do campo de digitação padrão (28px de altura; moldura e barra da esquerda vêm do index.css)
  * - Botao: botão com a mesma altura dos campos (tom normal | primario | perigo)
  * - Dialogo: janela modal com faixa de título/subtítulo e rodapé de botões; Esc fecha; foco no 1º campo vazio
  * - LinhaCampo: linha de "planilha" dos diálogos (rótulo à esquerda, campo à direita, risco embaixo)
