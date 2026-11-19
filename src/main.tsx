@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { instalarSelecaoAoFocar } from './lib/selecaoAoFocar';
 import './index.css';
+import { Dica } from './components/Dica';
 
 instalarSelecaoAoFocar();
 
@@ -14,5 +15,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <Dica />
   </StrictMode>,
 );

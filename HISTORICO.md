@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.0.10 — 2026-11-19
+
+- Dicas (tooltips) no padrão BMsoft em todo o app: caixa escura com seta no lugar da dica nativa do navegador.
+
 ## 0.0.9 — 2026-11-17
 
 - Dados da tabela: "Primeiro" e "Último" (botões do rodapé e Ctrl+Home/Ctrl+End) vão ao primeiro e ao último registro reais da tabela, não só aos já carregados. O Último abre direto a última página e conta as linhas ("Registro 400.000 de 400.000"); dali, as anteriores vêm ao rolar para cima.
